@@ -22,12 +22,18 @@ from pathlib import Path
 import torch
 
 import main_dino
+import pcr_classification
 import submitit
 
 
 def parse_args():
+    # parser = argparse.ArgumentParser(
+    #     "Submitit for DINO", parents=[main_dino.get_args_parser()]
+    # )
     parser = argparse.ArgumentParser(
-        "Submitit for DINO", parents=[main_dino.get_args_parser()]
+        # "Submitit for DINO", parents=[pcr_classification.get_args_parser()]
+        "Submitit for MIL",
+        parents=[pcr_classification.get_args_parser()],
     )
     parser.add_argument(
         "--ngpus", default=8, type=int, help="Number of gpus to request on each node"
@@ -87,13 +93,15 @@ class Trainer(object):
         self.args = args
 
     def __call__(self):
-        import main_dino
+        # import main_dino
+        import pcr_classification
 
         self._setup_gpu_args()
         if self.args.seed is None:
             self.args.seed = torch.randint(0, 100000, (1,)).item()
         Path(self.args.output_dir).mkdir(parents=True, exist_ok=True)
-        main_dino.train_dino(self.args)
+        # main_dino.train_dino(self.args)
+        pcr_classification.main(self.args)
 
     def checkpoint(self):
         import os
@@ -155,7 +163,8 @@ def main():
         **kwargs,
     )
 
-    executor.update_parameters(name="dino")
+    # executor.update_parameters(name="dino")
+    executor.update_parameters(name="mil")
 
     args.dist_url = get_init_file().as_uri()
 
