@@ -4,6 +4,7 @@ import torchvision
 from torchvision import transforms
 from typing import Callable, Dict, Optional, Tuple, Union
 from timm.models.layers import to_2tuple
+import numpy as np
 
 
 from tqdm import tqdm
@@ -12,7 +13,7 @@ import pandas as pd
 import math
 from PIL import Image
 import time
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedGroupKFold
 
 
 def stratified_group_split(
@@ -32,23 +33,6 @@ def stratified_group_split(
     samples_test = samples.loc[lambda d: d[group].isin(groups_test)]
 
     return samples_train, samples_test
-
-
-# def split_data(
-#     test_size,
-#     data_path="/home/t-9bchoy/breast-cancer-treatment-prediction/processed_dataset.csv",
-# ):
-#     data = pd.read_csv(data_path)
-
-#     if test_size > 0:
-#         fit_data, test_data = stratified_group_split(
-#             data, "PATIENT ID", "pcr", test_size
-#         )
-#     else:
-#         fit_data = data
-#         test_data = pd.DataFrame(columns=data.columns)
-
-#     return fit_data, test_data
 
 
 class ISPY2MRIRandomPatchSSLDataset(Dataset):
@@ -105,7 +89,13 @@ class ISPY2MRIRandomPatchSSLDataset(Dataset):
 
 
 class ISPY2MRIDataSet(Dataset):
-    def __init__(self, sequences, dataset="training", transform=None, image_size=256):
+    def __init__(
+        self,
+        sequences,
+        transform=None,
+        image_size=256,
+        data=None,
+    ):
         if not isinstance(sequences, list):
             sequences = [sequences]
         substring = "|".join(sequences)
@@ -113,14 +103,14 @@ class ISPY2MRIDataSet(Dataset):
         #     "/home/t-9bchoy/breast-cancer-treatment-prediction/processed_dataset.csv"
         # )
         # using the combined dataset
-        if dataset == "training":
-            data = pd.read_csv(
-                "/home/t-9bchoy/breast-cancer-treatment-prediction/train_processed_dataset_T012_one_hot.csv"
-            )
-        elif dataset == "testing":
-            data = pd.read_csv(
-                "/home/t-9bchoy/breast-cancer-treatment-prediction/test_processed_dataset_T012_one_hot.csv"
-            )
+        # if dataset == "training":
+        #     data = pd.read_csv(
+        #         "/home/t-9bchoy/breast-cancer-treatment-prediction/train_processed_dataset_T012_one_hot.csv"
+        #     )
+        # elif dataset == "testing":
+        #     data = pd.read_csv(
+        #         "/home/t-9bchoy/breast-cancer-treatment-prediction/test_processed_dataset_T012_one_hot.csv"
+        #     )
         self.xy = data[data["SHORTEN SEQUENCE"].str.contains(substring)]
 
         self.n_samples = len(self.xy)
@@ -147,3 +137,100 @@ class ISPY2MRIDataSet(Dataset):
 
     def __len__(self):
         return self.n_samples
+
+
+def get_datasets(
+    train_transform, sequences, val_transform, n_splits, random_state, image_size=256
+):
+
+    fit_data = pd.read_csv(
+        "/home/t-9bchoy/breast-cancer-treatment-prediction/train_processed_dataset_T012_one_hot.csv"
+    )
+
+    cv = StratifiedGroupKFold(
+        n_splits=n_splits, shuffle=True, random_state=random_state
+    )
+    fit_indices = np.arange(len(fit_data))
+    # create validation and training splits for each fold
+    # the data is all from the training data, but val splits use val transforms
+    # the stratified group k fold class makes splits where patients do not cross splits
+    # (based on patient id) and we aim for similar ratios of pcr/non-pcr
+    fit_datasets = [
+        (
+            ISPY2MRIDataSet(
+                sequences,
+                transform=train_transform,
+                image_size=image_size,
+                data=fit_data.iloc[train_indices],
+            ),
+            ISPY2MRIDataSet(
+                sequences,
+                transform=val_transform,
+                image_size=image_size,
+                data=fit_data.iloc[val_indices],
+            ),
+        )
+        for train_indices, val_indices in cv.split(
+            fit_indices, fit_data["pcr"], fit_data["PATIENT ID"]
+        )
+    ]
+
+    test_data = pd.read_csv(
+        "/home/t-9bchoy/breast-cancer-treatment-prediction/test_processed_dataset_T012_one_hot.csv"
+    )
+    test_dataset = ISPY2MRIDataSet(
+        sequences,
+        data=test_data,
+        transform=val_transform,
+        image_size=image_size,
+    )
+
+    # log_summary("train + validation", fit_metadata)
+    # log_summary("testing", test_metadata)
+
+    return fit_datasets, test_dataset
+
+
+# class ISPY2MRIDataSet(Dataset):
+#     def __init__(self, sequences, dataset="training", transform=None, image_size=256):
+#         if not isinstance(sequences, list):
+#             sequences = [sequences]
+#         substring = "|".join(sequences)
+#         # data = pd.read_csv(
+#         #     "/home/t-9bchoy/breast-cancer-treatment-prediction/processed_dataset.csv"
+#         # )
+#         # using the combined dataset
+#         if dataset == "training":
+#             data = pd.read_csv(
+#                 "/home/t-9bchoy/breast-cancer-treatment-prediction/train_processed_dataset_T012_one_hot.csv"
+#             )
+#         elif dataset == "testing":
+#             data = pd.read_csv(
+#                 "/home/t-9bchoy/breast-cancer-treatment-prediction/test_processed_dataset_T012_one_hot.csv"
+#             )
+#         self.xy = data[data["SHORTEN SEQUENCE"].str.contains(substring)]
+
+#         self.n_samples = len(self.xy)
+#         self.transform = transform
+#         # self.resize = transforms.Resize(to_2tuple(image_size))
+
+#     def __getitem__(self, index):
+#         row = self.xy.iloc[index]
+#         path = row["SEQUENCE PATH"]
+#         # image = self.resize(self.load_png(path))
+#         image = self.load_png(path)
+#         if self.transform == None:
+#             return image, row["pcr"]
+#         else:
+#             return self.transform(image), row["pcr"]
+
+#     def load_png(self, filename):
+#         try:
+#             image = Image.open(filename).convert("L")
+#         except OSError:
+#             time.sleep(2)
+#             image = Image.open(filename).convert("L")
+#         return image
+
+#     def __len__(self):
+#         return self.n_samples
