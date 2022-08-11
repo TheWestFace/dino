@@ -13,6 +13,8 @@ import torch.distributed as dist
 import torch
 
 # import wandb
+from timm.models.layers import to_2tuple
+import monai
 from monai.networks.nets import milmodel
 from transforms import GridTile, RandGridTile
 
@@ -52,6 +54,8 @@ def train_mil(args):
         )
     )
 
+    dist.barrier()
+
     datasets = torch.load(os.path.join(args.output_dir, "datasets.pth.tar"))
     fit_datasets = datasets["fit_datasets"]
     test_dataset = datasets["test_dataset"]
@@ -77,7 +81,7 @@ def train_mil(args):
     )
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
-        batch_size=args.batch_size,
+        batch_size=1,
         num_workers=args.num_workers,
         pin_memory=True,
         # drop_last=True,
@@ -249,7 +253,7 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
     for (inp, target) in metric_logger.log_every(loader, 20, header):
         inp = inp.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
-        one_hot_target = F.one_hot(target, num_classes=2)
+        # one_hot_target = F.one_hot(target, num_classes=2)
 
         # forward
         # with torch.no_grad():
@@ -261,6 +265,7 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
             b, t, c, h, w = inp.size()
             inp = inp.reshape((b * t, c, h, w))
             intermediate_output = model.module.net.get_intermediate_layers(inp, n)
+            # intermediate_output = model.net.get_intermediate_layers(inp, n)
             output = torch.cat([x[:, 0] for x in intermediate_output], dim=-1)
             if avgpool:
                 output = torch.cat(
@@ -273,6 +278,7 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
                 output = output.reshape(output.shape[0], -1)
             output = output.reshape(b, t, -1)
             output = model.module.calc_head(output)
+            # output = model.calc_head(output)
         else:
             output = model(inp)
 
@@ -306,7 +312,7 @@ def validate_network(val_loader, model, n, avgpool, arch):
     model.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = "Test:"
-    auc = torchmetrics.AUROC(num_classes=2).cuda()
+    # auc = torchmetrics.AUROC(num_classes=2).cuda()
     acc = torchmetrics.Accuracy(num_classes=2).cuda()
     for inp, target in metric_logger.log_every(val_loader, 20, header):
         inp = inp.cuda(non_blocking=True)
@@ -322,6 +328,7 @@ def validate_network(val_loader, model, n, avgpool, arch):
                 b, t, c, h, w = inp.size()
                 inp = inp.reshape((b * t, c, h, w))
                 intermediate_output = model.module.net.get_intermediate_layers(inp, n)
+                # intermediate_output = model.net.get_intermediate_layers(inp, n)
                 output = torch.cat([x[:, 0] for x in intermediate_output], dim=-1)
                 if avgpool:
                     output = torch.cat(
@@ -336,21 +343,27 @@ def validate_network(val_loader, model, n, avgpool, arch):
                     output = output.reshape(output.shape[0], -1)
                 output = output.reshape(b, t, -1)
                 output = model.module.calc_head(output)
+                # output = model.calc_head(output)
             else:
                 output = model(inp)
-        loss = nn.CrossEntropyLoss()(output, target)
+            loss = nn.CrossEntropyLoss()(output, target)
 
-        auc.update(output, target)
-        acc.update(output, target)
+            # auc.update(output, target)
+            acc.update(output, target)
 
-        metric_logger.update(loss=loss.item())
-    auc = auc.compute()
+            metric_logger.update(loss=loss.item())
+    # auc = auc.compute()
     acc = acc.compute()
-    metric_logger.update(auc=auc.item())
+    # metric_logger.update(auc=auc.item())
     metric_logger.update(acc=acc.item())
+    # print(
+    #     "* accuracy {acc.global_avg:.3f} loss {losses.global_avg:.3f} auc {auc.global_avg:.3f}".format(
+    #         acc=metric_logger.acc, losses=metric_logger.loss, auc=metric_logger.auc
+    #     )
+    # )
     print(
-        "* accuracy {acc.global_avg:.3f} loss {losses.global_avg:.3f} auc {auc.global_avg:.3f}".format(
-            acc=metric_logger.acc, losses=metric_logger.loss, auc=metric_logger.auc
+        "* accuracy {acc.global_avg:.3f} loss {losses.global_avg:.3f}".format(
+            acc=metric_logger.acc, losses=metric_logger.loss
         )
     )
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
@@ -518,12 +531,13 @@ def main(args):
 
     logger = utils.setup_logging(args.output_dir, f"main")
     utils.init_distributed_mode(args)
-    # hack assumes we are running iwth slurm
+
     if utils.is_main_process():
         utils.log_code_state(args.output_dir)
         if not os.path.isfile(os.path.join(args.output_dir, "datasets.pth.tar")):
             val_transform = pth_transforms.Compose(
                 [
+                    pth_transforms.Resize(to_2tuple(256)),
                     pth_transforms.ToTensor(),
                     pth_transforms.Normalize(volser_mean, volser_std),
                     # FIXME do not hardcode overlap
@@ -535,7 +549,6 @@ def main(args):
                     pth_transforms.RandomHorizontalFlip(),
                     pth_transforms.ToTensor(),
                     pth_transforms.Normalize(volser_mean, volser_std),
-                    RandGridTile(tile_size=args.tile_size),
                 ]
             )
 
@@ -545,7 +558,6 @@ def main(args):
                 val_transform,
                 args.folds,
                 args.seed,
-                image_size=256,
             )
             torch.save(
                 {"fit_datasets": fit_datasets, "test_dataset": test_dataset},
@@ -558,14 +570,17 @@ def main(args):
                 )
 
     # On None, we combine train and val datasets to train and test on held-out test dataset
-    work = list(range(args.folds)) + [None]
+    work = [1, None]
+    # work = list(range(args.folds)) + [None]
+    # FIXME HACK taking out testing dataset for now
+    # work = list(range(args.folds))
     results = []
-    dist.barrier()
+    # dist.barrier()
     for w in work:
-        args.fold = w + 1
+        args.fold = w
         results += [train_mil(args)]
 
-    if utils.utils.is_main_process():
+    if utils.is_main_process():
         results = pd.DataFrame(results)
         logger.info(
             "training completed in {:.1f} minutes with mean validation accuracy {:.3f} +/ {:.3f}; test accuracy {:.3f}".format(
@@ -576,22 +591,9 @@ def main(args):
             )
         )
 
-        results.to_pickle(Path(args.output_dir) / "results.pkl")
-        with (Path(args.output_dir) / "args.json").open("w") as f:
+        results.to_pickle(args.output_dir + "/results.pkl")
+        with (args.output_dir + "/args.json").open("w") as f:
             f.write(json.dumps(vars(args)) + "\n")
-
-    # TODO
-    # if args.project is not None:
-    #     wandb.login()
-    #     config = args.config if args.config else args
-    #     run = wandb.init(config=config, project=args.project)
-    #     wandb.log(
-    #         {
-    #             "val_c_index": results[~pd.isnull(results.fold)].c_index.mean(),
-    #             "val_c_index_std": results[~pd.isnull(results.fold)].c_index.std(),
-    #             "test_c_index": results[pd.isnull(results.fold)].c_index,
-    #         }
-    #     )
 
 
 if __name__ == "__main__":

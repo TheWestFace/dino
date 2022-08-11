@@ -22,24 +22,42 @@ import torch.backends.cudnn as cudnn
 from torchvision import datasets
 from torchvision import transforms as pth_transforms
 from torchvision import models as torchvision_models
+import time
 
 import utils
 import vision_transformer as vits
+from ISPY2MRI import ISPY2MRIRandomPatchSSLDataset
+
+volser_mean = torch.tensor(0.1063)
+volser_std = torch.tensor(0.0572)
 
 
 def extract_feature_pipeline(args):
     # ============ preparing data ... ============
     transform = pth_transforms.Compose(
         [
-            pth_transforms.Resize(256, interpolation=3),
-            pth_transforms.CenterCrop(224),
+            # NEED TO CHECK IF THE CROP SIZE IS GOOD OR NOT
+            # pth_transforms.Resize(256, interpolation=3),
+            # pth_transforms.CenterCrop(224),
             pth_transforms.ToTensor(),
-            pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            # pth_transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+            pth_transforms.Normalize(volser_mean, volser_std),
         ]
     )
+
+    # /////////
+    # dataset_train = ISPY2MRIRandomPatchSSLDataset(
+    #     "ISPY2_VOLSER_uni_lateral_cropped_PE2", "training", transform=transform
+    # )
+    # /////////
     dataset_train = ReturnIndexDataset(
         os.path.join(args.data_path, "train"), transform=transform
     )
+
+    # dataset_val = ISPY2MRIRandomPatchSSLDataset(
+    #     "ISPY2_VOLSER_uni_lateral_cropped_PE2", "testing", transform=transform
+    # )
+
     dataset_val = ReturnIndexDataset(
         os.path.join(args.data_path, "val"), transform=transform
     )
@@ -160,8 +178,9 @@ def extract_features(model, data_loader, use_cuda=True, multiscale=False):
 
 
 @torch.no_grad()
+# changed num classes from 1000 to 2 (pcr or non-pcr)
 def knn_classifier(
-    train_features, train_labels, test_features, test_labels, k, T, num_classes=1000
+    train_features, train_labels, test_features, test_labels, k, T, num_classes=2
 ):
     top1, top5, total = 0.0, 0.0, 0
     train_features = train_features.t()
@@ -210,8 +229,13 @@ class ReturnIndexDataset(datasets.ImageFolder):
         return img, idx
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser("Evaluation with weighted k-NN on ImageNet")
+# if __name__ == "__main__":
+
+
+def get_args_parser():
+    parser = argparse.ArgumentParser(
+        "Evaluation with weighted k-NN on ImageNet", add_help=False
+    )
     parser.add_argument(
         "--batch_size_per_gpu", default=128, type=int, help="Per-GPU batch-size"
     )
@@ -280,9 +304,12 @@ if __name__ == "__main__":
         type=int,
         help="Please ignore and do not set this argument.",
     )
-    parser.add_argument("--data_path", default="/path/to/imagenet/", type=str)
-    args = parser.parse_args()
+    # parser.add_argument("--data_path", default="/path/to/imagenet/", type=str)
+    # args = parser.parse_args()
+    return parser
 
+
+def main(args):
     utils.init_distributed_mode(args)
     print("git:\n  {}\n".format(utils.get_sha()))
     print(
@@ -323,3 +350,9 @@ if __name__ == "__main__":
             )
             print(f"{k}-NN classifier result: Top1: {top1}, Top5: {top5}")
     dist.barrier()
+
+
+if __name__ == "__main__":
+    parser = get_args_parser()
+    args = parser.parse_args()
+    main(args)

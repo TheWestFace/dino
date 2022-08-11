@@ -35,6 +35,7 @@ def stratified_group_split(
     return samples_train, samples_test
 
 
+# need to add SUBTYPE CSV TO THIS CLASS
 class ISPY2MRIRandomPatchSSLDataset(Dataset):
     def __init__(
         self,
@@ -117,8 +118,9 @@ class ISPY2MRIDataSet(Dataset):
         row = self.xy.iloc[index]
         path = row["SEQUENCE PATH"]
         # image = self.resize(self.load_png(path))
-        image = self.resize(cached_load_png(path))
-        image = self.load_png(path)
+        # image = self.resize(cached_load_png(path))
+        image = cached_load_png(path)
+        # image = self.load_png(path)
         if self.transform == None:
             return image, row["pcr"]
         else:
@@ -136,9 +138,7 @@ class ISPY2MRIDataSet(Dataset):
         return self.n_samples
 
 
-def get_datasets(
-    train_transform, sequences, val_transform, n_splits, random_state, image_size=256
-):
+def get_datasets(train_transform, sequences, val_transform, n_splits, random_state):
 
     fit_data = pd.read_csv(
         "/home/t-9bchoy/breast-cancer-treatment-prediction/train_processed_dataset_T012_one_hot.csv"
