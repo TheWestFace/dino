@@ -5,7 +5,7 @@ from torchvision import transforms
 from typing import Callable, Dict, Optional, Tuple, Union
 from timm.models.layers import to_2tuple
 import numpy as np
-
+from utils import cached_load_png
 
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
@@ -90,11 +90,7 @@ class ISPY2MRIRandomPatchSSLDataset(Dataset):
 
 class ISPY2MRIDataSet(Dataset):
     def __init__(
-        self,
-        sequences,
-        transform=None,
-        image_size=256,
-        data=None,
+        self, sequences, transform=None, image_size=256, data=None, dataset=None
     ):
         if not isinstance(sequences, list):
             sequences = [sequences]
@@ -103,24 +99,25 @@ class ISPY2MRIDataSet(Dataset):
         #     "/home/t-9bchoy/breast-cancer-treatment-prediction/processed_dataset.csv"
         # )
         # using the combined dataset
-        # if dataset == "training":
-        #     data = pd.read_csv(
-        #         "/home/t-9bchoy/breast-cancer-treatment-prediction/train_processed_dataset_T012_one_hot.csv"
-        #     )
-        # elif dataset == "testing":
-        #     data = pd.read_csv(
-        #         "/home/t-9bchoy/breast-cancer-treatment-prediction/test_processed_dataset_T012_one_hot.csv"
-        #     )
+        if dataset == "training":
+            data = pd.read_csv(
+                "/home/t-9bchoy/breast-cancer-treatment-prediction/train_processed_dataset_T012_one_hot.csv"
+            )
+        elif dataset == "testing":
+            data = pd.read_csv(
+                "/home/t-9bchoy/breast-cancer-treatment-prediction/test_processed_dataset_T012_one_hot.csv"
+            )
         self.xy = data[data["SHORTEN SEQUENCE"].str.contains(substring)]
 
         self.n_samples = len(self.xy)
         self.transform = transform
-        # self.resize = transforms.Resize(to_2tuple(image_size))
+        self.resize = transforms.Resize(to_2tuple(image_size))
 
     def __getitem__(self, index):
         row = self.xy.iloc[index]
         path = row["SEQUENCE PATH"]
         # image = self.resize(self.load_png(path))
+        image = self.resize(cached_load_png(path))
         image = self.load_png(path)
         if self.transform == None:
             return image, row["pcr"]

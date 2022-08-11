@@ -29,6 +29,8 @@ import socket
 
 import logging
 from pathlib import Path
+import pydicom
+from functools import lru_cache
 
 import numpy as np
 import torch
@@ -40,8 +42,14 @@ from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from torchvision.utils import make_grid
+from PIL import Image, ImageFilter, ImageOps
 
 logger = logging.getLogger()
+
+
+@lru_cache(maxsize=None)
+def cached_load_png(path):
+    return Image.open(path).convert("L")
 
 
 def prepare_output_dir(output_dir, autolabel, group=None):
