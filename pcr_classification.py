@@ -554,7 +554,7 @@ def main(args):
                     # ),
                     RandGridTile(
                         tile_count=None,
-                        tile_size=32,
+                        tile_size=args.tile_size[0],
                         random_offset=True,
                         background_val=256,
                     ),
@@ -580,10 +580,12 @@ def main(args):
                 )
 
     # On None, we combine train and val datasets to train and test on held-out test dataset
-    work = [1, None]
-    # work = list(range(args.folds)) + [None]
-    # FIXME HACK taking out testing dataset for now
-    # work = list(range(args.folds))
+    # just test
+    # work = [None]
+
+    # just folds
+    work = list(range(args.folds))
+
     results = []
     # dist.barrier()
     for w in work:

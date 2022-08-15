@@ -13,7 +13,6 @@
 # limitations under the License.
 """
 Misc functions.
-
 Mostly copy-paste from torchvision references or other public repos like DETR:
 https://github.com/facebookresearch/detr/blob/master/util/misc.py
 """
@@ -28,21 +27,21 @@ from collections import defaultdict, deque
 import socket
 
 import logging
-from pathlib import Path
-import pydicom
-from functools import lru_cache
 
 import numpy as np
 import torch
 from torch import nn
 import torch.distributed as dist
-from PIL import ImageFilter, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 import git
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 import matplotlib.pyplot as plt
 from torchvision.utils import make_grid
-from PIL import Image, ImageFilter, ImageOps
+from pathlib import Path
+import pydicom
+from functools import lru_cache
+
 
 logger = logging.getLogger()
 
@@ -163,7 +162,6 @@ def save(obj, path):
     """Wrapper for torch.save that adds a 'partial' tag
     until writing is complete. This protects us from loading
     checkpoints which were interrupted during writing.
-
     Args:
         obj (Any): Object to save.
         path (str | PathLike | BinaryIO | IO[bytes): Path to save.
@@ -423,7 +421,6 @@ def cosine_scheduler(
 def bool_flag(s):
     """
     Parse boolean arguments from the command line.
-
     Some tools, i.e. wandb, require flags.
     """
     FALSY_STRINGS = {"off", "false", "0"}
@@ -1137,7 +1134,6 @@ class EarlyStopping:
     """
     Early stopping to stop the training when the loss does not improve after
     certain epochs.
-
     Modified from: https://debuggercafe.com/using-learning-rate-scheduler-and-early-stopping-with-pytorch/
     """
 
