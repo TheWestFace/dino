@@ -437,6 +437,12 @@ def get_args_parser():
         help='Key to use in the checkpoint (example: "teacher")',
     )
     parser.add_argument(
+        "--timepoint",
+        default=None,
+        type=str,
+        help="T0, T1, T2 default is all three timepoints together",
+    )
+    parser.add_argument(
         "--epochs", default=20, type=int, help="Number of epochs of training."
     )
     parser.add_argument(
@@ -568,6 +574,7 @@ def main(args):
                 val_transform,
                 args.folds,
                 args.seed,
+                args.timepoint,
             )
             torch.save(
                 {"fit_datasets": fit_datasets, "test_dataset": test_dataset},
@@ -581,10 +588,12 @@ def main(args):
 
     # On None, we combine train and val datasets to train and test on held-out test dataset
     # just test
-    # work = [None]
+    # batch size = 1
+    work = [None]
 
     # just folds
-    work = list(range(args.folds))
+    # can increase batch size
+    # work = list(range(args.folds))
 
     results = []
     # dist.barrier()
