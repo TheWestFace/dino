@@ -107,12 +107,9 @@ class ISPY2MRIRandomPatchSSLDataset(Dataset):
 
 
 class ISPY2MRIDataSet(Dataset):
+    # timepoint: T0, T1, T2
     def __init__(
-        self,
-        sequences,
-        transform=None,
-        data=None,
-        dataset=None,
+        self, sequences, transform=None, data=None, dataset=None, timepoint=None
     ):
         if not isinstance(sequences, list):
             sequences = [sequences]
@@ -130,6 +127,15 @@ class ISPY2MRIDataSet(Dataset):
                 "/home/t-9bchoy/breast-cancer-treatment-prediction/test_processed_dataset_T012_one_hot.csv"
             )
         self.xy = data[data["SHORTEN SEQUENCE"].str.contains(substring)]
+        if timepoint != None:
+            if timepoint.lower() == "t0":
+                self.xy = data[data["SEQUENCE PATH"].str.contains("ISPY2MRIT0")]
+            elif timepoint.lower() == "t1":
+                self.xy = data[data["SEQUENCE PATH"].str.contains("ISPY2MRIT1")]
+            elif timepoint.lower() == "t2":
+                self.xy = data[data["SEQUENCE PATH"].str.contains("ISPY2MRIT2")]
+            else:
+                raise RuntimeError("timepoint must be T0,T1,T2")
 
         self.n_samples = len(self.xy)
         self.transform = transform
@@ -156,7 +162,9 @@ class ISPY2MRIDataSet(Dataset):
         return self.n_samples
 
 
-def get_datasets(train_transform, sequences, val_transform, n_splits, random_state):
+def get_datasets(
+    train_transform, sequences, val_transform, n_splits, random_state, timepoint
+):
 
     fit_data = pd.read_csv(
         "/home/t-9bchoy/breast-cancer-treatment-prediction/train_processed_dataset_T012_one_hot.csv"
@@ -176,11 +184,13 @@ def get_datasets(train_transform, sequences, val_transform, n_splits, random_sta
                 sequences,
                 transform=train_transform,
                 data=fit_data.iloc[train_indices],
+                timepoint=timepoint,
             ),
             ISPY2MRIDataSet(
                 sequences,
                 transform=val_transform,
                 data=fit_data.iloc[val_indices],
+                timepoint=timepoint,
             ),
         )
         for train_indices, val_indices in cv.split(
@@ -195,6 +205,7 @@ def get_datasets(train_transform, sequences, val_transform, n_splits, random_sta
         sequences,
         data=test_data,
         transform=val_transform,
+        timepoint=timepoint,
     )
 
     # log_summary("train + validation", fit_metadata)
