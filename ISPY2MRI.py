@@ -184,13 +184,13 @@ def get_datasets(
                 sequences,
                 transform=train_transform,
                 data=fit_data.iloc[train_indices],
-                timepoint=None,
+                timepoint=timepoint,
             ),
             ISPY2MRIDataSet(
                 sequences,
                 transform=val_transform,
                 data=fit_data.iloc[val_indices],
-                timepoint=None,
+                timepoint=timepoint,
             ),
         )
         for train_indices, val_indices in cv.split(

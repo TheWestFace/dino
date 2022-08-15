@@ -348,7 +348,7 @@ def train_dino(args):
     # tried 448, 512, 720, 1200, 1600, 3200, 8000
     # changed ISPY2MRIDataSet -> IPSY2MRIRandomPatchSSLDataset
     dataset = ISPY2MRIRandomPatchSSLDataset(
-        args.sequences, "training", transform, image_size=256
+        args.sequences, "training", transform, image_size=256, patch_size=32
     )
 
     sampler = torch.utils.data.DistributedSampler(dataset, shuffle=True)

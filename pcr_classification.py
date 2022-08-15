@@ -602,20 +602,20 @@ def main(args):
 
     if utils.is_main_process():
         results = pd.DataFrame(results)
-        logger.info(
-            "training completed in {:.1f} minutes".format((time.time() - start) / 60.0)
-        )
         # we have a test result
         if len(results[pd.isnull(results.fold)]) > 0:
             logger.info(
-                "test accuracy: {:.3f}".format(
+                "training completed in {:.1f} minutes with mean validation accuracy {:.3f} +/ {:.3f}; test accuracy {:.3f}".format(
+                    (time.time() - start) / 60.0,
+                    results.acc.mean(),
+                    results.acc.std(),
                     results[pd.isnull(results.fold)].acc.iloc[0],
                 )
             )
-        # we have val results
-        if len(results[~pd.isnull(results.fold)]) > 0:
+        else:
             logger.info(
-                "mean validation accuracy: {:.3f} +/- {:.3f}".format(
+                "training completed in {:.1f} minutes with mean validation accuracy {:.3f} +/ {:.3f}".format(
+                    (time.time() - start) / 60.0,
                     results.acc.mean(),
                     results.acc.std(),
                 )
