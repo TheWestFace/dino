@@ -245,7 +245,6 @@ def train_mil(args):
 
 def train(model, optimizer, loader, epoch, n, avgpool, arch):
     model.train()
-    logger = utils.setup_logging("/home/t-9bchoy/dino/pcr_class_runs", f"testing")
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value:.6f}"))
     header = "Epoch: [{}]".format(epoch)
@@ -603,14 +602,24 @@ def main(args):
 
     if utils.is_main_process():
         results = pd.DataFrame(results)
-        logger.info(
-            "training completed in {:.1f} minutes with mean validation accuracy {:.3f} +/ {:.3f}; test accuracy {:.3f}".format(
-                (time.time() - start) / 60.0,
-                results.acc.mean(),
-                results.acc.std(),
-                results[pd.isnull(results.fold)].acc.iloc[0],
+        # we have a test result
+        if len(results[pd.isnull(results.fold)]) > 0:
+            logger.info(
+                "training completed in {:.1f} minutes with mean validation accuracy {:.3f} +/ {:.3f}; test accuracy {:.3f}".format(
+                    (time.time() - start) / 60.0,
+                    results.acc.mean(),
+                    results.acc.std(),
+                    results[pd.isnull(results.fold)].acc.iloc[0],
+                )
             )
-        )
+        else:
+            logger.info(
+                "training completed in {:.1f} minutes with mean validation accuracy {:.3f} +/ {:.3f}".format(
+                    (time.time() - start) / 60.0,
+                    results.acc.mean(),
+                    results.acc.std(),
+                )
+            )
 
         results.to_pickle(args.output_dir + "/results.pkl")
         with (args.output_dir + "/args.json").open("w") as f:
