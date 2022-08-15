@@ -159,62 +159,70 @@ class RandGridTile(Randomizable, Transform):
         return self.splitter(data)
 
 
-# class RandGridTile(GridTile, RandomizableTransform):
-#     """
-#     Extract all the tiles sweeping the entire image in a row-major sliding-window manner with possible overlaps,
-#     and with random offset for the minimal corner of the image, (0,0) for 2D and (0,0,0) for 3D.
-#     It can sort the patches and return all or a subset of them.
-#     Adapted from MONAI from pathology-centric focus (fixed number of tiles with sorting) to radiology-centric focus (all non-background tiles).
-#     https://github.com/Project-MONAI/MONAI/blob/dev/monai/transforms/spatial/array.py
-#     Args:
-#         tile_size: size of tiles to generate slices for, 0 or None selects whole dimension
-#         min_offset: the minimum range of offset to be selected randomly. Defaults to 0.
-#         max_offset: the maximum range of offset to be selected randomly.
-#             Defaults to image size modulo tile size.
-#         overlap: the amount of overlap of neighboring tiles in each dimension (a value between 0.0 and 1.0).
-#             If only one float number is given, it will be applied to all dimensions. Defaults to 0.0.
-#         pad_mode: refer to NumpyPadMode and PytorchPadMode. If None, no padding will be applied. Defaults to ``"constant"``.
-#         pad_kwargs: other arguments for the `np.pad` or `torch.pad` function.
-#     """
+class RandGridPatch(GridTile, RandomizableTransform):
+    """
+    Extract all the patches sweeping the entire image in a row-major sliding-window manner with possible overlaps,
+    and with random offset for the minimal corner of the image, (0,0) for 2D and (0,0,0) for 3D.
+    It can sort the patches and return all or a subset of them.
+    Args:
+        patch_size: size of patches to generate slices for, 0 or None selects whole dimension
+        min_offset: the minimum range of offset to be selected randomly. Defaults to 0.
+        max_offset: the maximum range of offset to be selected randomly.
+            Defaults to image size modulo patch size.
+        num_patches: number of patches to return. Defaults to None, which returns all the available patches.
+        overlap: the amount of overlap of neighboring patches in each dimension (a value between 0.0 and 1.0).
+            If only one float number is given, it will be applied to all dimensions. Defaults to 0.0.
+        sort_fn: when `num_patches` is provided, it determines if keep patches with highest values (`"max"`),
+            lowest values (`"min"`), or in their default order (`None`). Default to None.
+        threshold: a value to keep only the patches whose sum of intensities are less than the threshold.
+            Defaults to no filtering.
+        pad_mode: refer to NumpyPadMode and PytorchPadMode. If None, no padding will be applied. Defaults to ``"constant"``.
+        pad_kwargs: other arguments for the `np.pad` or `torch.pad` function.
+    """
 
-#     backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
+    backend = [TransformBackends.TORCH, TransformBackends.NUMPY]
 
-#     def __init__(
-#         self,
-#         tile_size: Sequence[int],
-#         min_offset: Optional[Union[Sequence[int], int]] = None,
-#         max_offset: Optional[Union[Sequence[int], int]] = None,
-#         max_frac_black: Optional[float] = None,
-#         pad_mode: str = PytorchPadMode.CONSTANT,
-#         **pad_kwargs,
-#     ):
-#         super().__init__(
-#             tile_size=tile_size,
-#             offset=(),
-#             overlap=0.0,
-#             max_frac_black=max_frac_black,
-#             pad_mode=pad_mode,
-#             **pad_kwargs,
-#         )
-#         self.min_offset = min_offset
-#         self.max_offset = max_offset
+    def __init__(
+        self,
+        patch_size: Sequence[int],
+        min_offset: Optional[Union[Sequence[int], int]] = None,
+        max_offset: Optional[Union[Sequence[int], int]] = None,
+        num_patches: Optional[int] = None,
+        overlap: Union[Sequence[float], float] = 0.0,
+        sort_fn: Optional[str] = None,
+        threshold: Optional[float] = None,
+        pad_mode: str = PytorchPadMode.CONSTANT,
+        **pad_kwargs,
+    ):
+        super().__init__(
+            patch_size=patch_size,
+            offset=(),
+            num_patches=num_patches,
+            overlap=overlap,
+            sort_fn=sort_fn,
+            threshold=threshold,
+            pad_mode=pad_mode,
+            **pad_kwargs,
+        )
+        self.min_offset = min_offset
+        self.max_offset = max_offset
 
-#     def randomize(self, array):
-#         if self.min_offset is None:
-#             min_offset = (0,) * len(self.tile_size)
-#         else:
-#             min_offset = ensure_tuple_rep(self.min_offset, len(self.tile_size))
-#         if self.max_offset is None:
-#             max_offset = tuple(s % p for s, p in zip(array.shape[1:], self.tile_size))
-#         else:
-#             max_offset = ensure_tuple_rep(self.max_offset, len(self.tile_size))
+    def randomize(self, array):
+        if self.min_offset is None:
+            min_offset = (0,) * len(self.patch_size)
+        else:
+            min_offset = ensure_tuple_rep(self.min_offset, len(self.patch_size))
+        if self.max_offset is None:
+            max_offset = tuple(s % p for s, p in zip(array.shape[1:], self.patch_size))
+        else:
+            max_offset = ensure_tuple_rep(self.max_offset, len(self.patch_size))
 
-#         self.offset = tuple(
-#             self.R.randint(low=low, high=high + 1)
-#             for low, high in zip(min_offset, max_offset)
-#         )
+        self.offset = tuple(
+            self.R.randint(low=low, high=high + 1)
+            for low, high in zip(min_offset, max_offset)
+        )
 
-#     def __call__(self, array: NdarrayOrTensor, randomize: bool = True):
-#         if randomize:
-#             self.randomize(array)
-#         return super().__call__(array)
+    def __call__(self, array: NdarrayOrTensor, randomize: bool = True):
+        if randomize:
+            self.randomize(array)
+        return super().__call__(array)

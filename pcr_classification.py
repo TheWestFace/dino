@@ -1,4 +1,7 @@
+import torch.distributed as dist
+import monai
 import argparse
+from timm.models.layers import to_2tuple
 import torch.nn.functional as F
 import torchmetrics
 import sys
@@ -8,13 +11,10 @@ import pandas as pd
 import json
 import os
 from pathlib import Path
-import torch.distributed as dist
 
 import torch
 
 # import wandb
-from timm.models.layers import to_2tuple
-import monai
 from monai.networks.nets import milmodel
 from transforms import GridTile, RandGridTile
 
@@ -36,7 +36,6 @@ volser_std = torch.tensor(0.0572)
 
 
 def train_mil(args):
-    # utils.init_distributed_mode(args)
     if args.seed is None:
         args.seed = torch.randint(0, 100000, (1,)).item()
     utils.fix_random_seeds(args.seed)
@@ -55,7 +54,6 @@ def train_mil(args):
     )
 
     dist.barrier()
-
     datasets = torch.load(os.path.join(args.output_dir, "datasets.pth.tar"))
     fit_datasets = datasets["fit_datasets"]
     test_dataset = datasets["test_dataset"]
@@ -241,11 +239,13 @@ def train_mil(args):
     )
     result = test_stats if args.fold == None else val_stats
     result["fold"] = args.fold
+
     return result
 
 
 def train(model, optimizer, loader, epoch, n, avgpool, arch):
     model.train()
+    logger = utils.setup_logging("/home/t-9bchoy/dino/pcr_class_runs", f"testing")
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value:.6f}"))
     header = "Epoch: [{}]".format(epoch)
@@ -253,12 +253,12 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
     for (inp, target) in metric_logger.log_every(loader, 20, header):
         inp = inp.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
+
         # one_hot_target = F.one_hot(target, num_classes=2)
 
         # forward
         # with torch.no_grad():
         if "vit" in arch:
-            inp = inp.squeeze(0)
 
             # b, t, c, h, w: dimensions for batch, tile, color, height, width
             # we reshape to stack all of the tiles in the batch dimension
@@ -278,6 +278,7 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
                 output = output.reshape(output.shape[0], -1)
             output = output.reshape(b, t, -1)
             output = model.module.calc_head(output)
+
             # output = model.calc_head(output)
         else:
             output = model(inp)
@@ -317,12 +318,9 @@ def validate_network(val_loader, model, n, avgpool, arch):
     for inp, target in metric_logger.log_every(val_loader, 20, header):
         inp = inp.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
-        one_hot_target = F.one_hot(target, num_classes=2)
 
         with torch.no_grad():
             if "vit" in arch:
-                inp = inp.squeeze(0)
-
                 # b, t, c, h, w: dimensions for batch, tile, color, height, width
                 # we reshape to stack all of the tiles in the batch dimension
                 b, t, c, h, w = inp.size()
@@ -527,11 +525,9 @@ def get_args_parser():
 def main(args):
     start = time.time()
     args.output_dir = utils.prepare_output_dir(args.output_dir, args.autolabel)
-    utils.log_code_state(args.output_dir)
 
     logger = utils.setup_logging(args.output_dir, f"main")
     utils.init_distributed_mode(args)
-
     if utils.is_main_process():
         utils.log_code_state(args.output_dir)
         if not os.path.isfile(os.path.join(args.output_dir, "datasets.pth.tar")):
@@ -547,7 +543,21 @@ def main(args):
             train_transform = pth_transforms.Compose(
                 [
                     pth_transforms.RandomHorizontalFlip(),
+                    pth_transforms.Resize(to_2tuple(256)),
                     pth_transforms.ToTensor(),
+                    # GridTile(tile_size=args.tile_size, overlap=0.2),
+                    # RandGridTile(
+                    #     tile_count=None,
+                    #     tile_size=args.tile_size[0],
+                    #     random_offset=True,
+                    #     background_val=0.0,
+                    # ),
+                    RandGridTile(
+                        tile_count=None,
+                        tile_size=32,
+                        random_offset=True,
+                        background_val=256,
+                    ),
                     pth_transforms.Normalize(volser_mean, volser_std),
                 ]
             )
