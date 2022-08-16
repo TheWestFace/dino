@@ -30,6 +30,10 @@ import utils
 import vision_transformer as vits
 from ISPY2MRI import get_datasets
 
+# confusion matrix
+from sklearn.metrics import ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
+
 # ISPY2_VOLSER_uni_lateral_cropped_PE2 MEAN and STD
 volser_mean = torch.tensor(0.1063)
 volser_std = torch.tensor(0.0572)
@@ -249,6 +253,8 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
     metric_logger.add_meter("lr", utils.SmoothedValue(window_size=1, fmt="{value:.6f}"))
     header = "Epoch: [{}]".format(epoch)
     acc = torchmetrics.Accuracy(num_classes=2).cuda()
+    auc = torchmetrics.AUROC(num_classes=2).cuda()
+    confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2).cuda()
     for (inp, target) in metric_logger.log_every(loader, 20, header):
         inp = inp.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
@@ -287,6 +293,10 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
         acc.update(output, target)
         if torch.isnan(loss):
             raise RuntimeError("Loss is NaN!")
+        # update auc
+        auc.update(output, target)
+        # update confusion matrix
+        confusion_matrix.update(output, target)
 
         # compute the gradients
         optimizer.zero_grad()
@@ -299,6 +309,15 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
         torch.cuda.synchronize()
         metric_logger.update(loss=loss.item())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
+    auc = auc.compute()
+    print("AUC!!! ", auc.item())
+
+    confusion_matrix = confusion_matrix.compute()
+    ConfusionMatrixDisplay(confusion_matrix.cpu().numpy()).plot()
+    plt.savefig(args.output_dir, "confusion_matrix.png")
+    plt.savefig(args.output_dir, "confusion_matrix.pdf")
+
     acc = acc.compute()
     metric_logger.update(acc=acc.item())
     # gather the stats from all processes
@@ -587,11 +606,11 @@ def main(args):
 
     # On None, we combine train and val datasets to train and test on held-out test dataset
     # just test
-    # batch size = 1
+    # # batch size = 1
     work = [None]
 
     # just folds
-    # can increase batch size
+    # # can increase batch size
     # work = list(range(args.folds))
 
     results = []
