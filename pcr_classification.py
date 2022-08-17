@@ -289,7 +289,8 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
             output = model(inp)
 
         # compute cross entropy loss
-        loss = nn.CrossEntropyLoss()(output, target)
+        class_weights = torch.tensor([0.01, 0.99]).cuda()
+        loss = nn.CrossEntropyLoss(weight=class_weights)(output, target)
         acc.update(output, target)
         if torch.isnan(loss):
             raise RuntimeError("Loss is NaN!")
@@ -315,8 +316,8 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
 
     confusion_matrix = confusion_matrix.compute()
     ConfusionMatrixDisplay(confusion_matrix.cpu().numpy()).plot()
-    plt.savefig(args.output_dir, "confusion_matrix.png")
-    plt.savefig(args.output_dir, "confusion_matrix.pdf")
+    plt.savefig("confusion_matrix.png")
+    plt.savefig("confusion_matrix.pdf")
 
     acc = acc.compute()
     metric_logger.update(acc=acc.item())
