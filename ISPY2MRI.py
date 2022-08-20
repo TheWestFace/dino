@@ -184,12 +184,14 @@ def get_datasets(
                 sequences,
                 transform=train_transform,
                 data=fit_data.iloc[train_indices],
+                # changed to set a timepoint --> previously timepoint = None
                 timepoint=timepoint,
             ),
             ISPY2MRIDataSet(
                 sequences,
                 transform=val_transform,
                 data=fit_data.iloc[val_indices],
+                # changed to set a timepoint --> previously timepoint = None ? or was also timepoint = timepoint
                 timepoint=timepoint,
             ),
         )

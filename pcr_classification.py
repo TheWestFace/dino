@@ -288,9 +288,10 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
         else:
             output = model(inp)
 
-        # compute cross entropy loss
+        # # compute cross entropy loss
         class_weights = torch.tensor([0.01, 0.99]).cuda()
         loss = nn.CrossEntropyLoss(weight=class_weights)(output, target)
+        # loss = nn.CrossEntropyLoss()(output, target)
         acc.update(output, target)
         if torch.isnan(loss):
             raise RuntimeError("Loss is NaN!")
@@ -316,8 +317,8 @@ def train(model, optimizer, loader, epoch, n, avgpool, arch):
 
     confusion_matrix = confusion_matrix.compute()
     ConfusionMatrixDisplay(confusion_matrix.cpu().numpy()).plot()
-    plt.savefig("confusion_matrix.png")
-    plt.savefig("confusion_matrix.pdf")
+    plt.savefig("confusion_matrixtrain100_0.01.png")
+    plt.savefig("confusion_matrixtrain100_0.01.pdf")
 
     acc = acc.compute()
     metric_logger.update(acc=acc.item())
@@ -333,6 +334,7 @@ def validate_network(val_loader, model, n, avgpool, arch):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = "Test:"
     # auc = torchmetrics.AUROC(num_classes=2).cuda()
+    # confusion_matrix = torchmetrics.ConfusionMatrix(num_classes=2).cuda()
     acc = torchmetrics.Accuracy(num_classes=2).cuda()
     for inp, target in metric_logger.log_every(val_loader, 20, header):
         inp = inp.cuda(non_blocking=True)
@@ -364,13 +366,23 @@ def validate_network(val_loader, model, n, avgpool, arch):
             else:
                 output = model(inp)
             loss = nn.CrossEntropyLoss()(output, target)
-
+            # compute cross entropy loss
+            # class_weights = torch.tensor([0.99, 0.01]).cuda()
+            # loss = nn.CrossEntropyLoss(weight=class_weights)(output, target)
             # auc.update(output, target)
             acc.update(output, target)
+
+            # confusion_matrix.update(output, target)
 
             metric_logger.update(loss=loss.item())
     # auc = auc.compute()
     acc = acc.compute()
+
+    # confusion_matrix = confusion_matrix.compute()
+    # ConfusionMatrixDisplay(confusion_matrix.cpu().numpy()).plot()
+    # plt.savefig("confusion_matrix2val.png")
+    # plt.savefig("confusion_matrix2val.pdf")
+
     # metric_logger.update(auc=auc.item())
     metric_logger.update(acc=acc.item())
     # print(
